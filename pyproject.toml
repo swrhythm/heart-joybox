@@ -1,0 +1,19 @@
+# The Joybox is installed by scripts/install.sh, not by pip - Raspberry Pi OS
+# blocks pip installs into the system Python and a Pi Zero would spend a long
+# time building wheels.  This file exists for the test runner and for tooling.
+
+[project]
+name = "heart-joybox"
+version = "1.0.0"
+description = "One-button Bible verse thermal printer for a Raspberry Pi Zero"
+requires-python = ">=3.11"
+dependencies = ["pillow"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+pi = ["gpiozero"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-q"

@@ -1,0 +1,8 @@
+# Give the thermal printer a stable name so config.toml never has to care
+# whether the kernel called it lp0 or lp1 this boot, and make it readable by
+# the joybox service (group lp).
+#
+# Matches any USB printer-class device, so it works with the Iware X-Series
+# XS-80UL and with whatever you replace it with.
+KERNEL=="lp[0-9]*", SUBSYSTEM=="usbmisc", SYMLINK+="joybox-printer", GROUP="lp", MODE="0660"
+KERNEL=="lp[0-9]*", SUBSYSTEM=="usb", SYMLINK+="joybox-printer", GROUP="lp", MODE="0660"

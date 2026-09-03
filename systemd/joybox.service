@@ -1,0 +1,32 @@
+[Unit]
+Description=Heart Joybox - one-button Bible verse thermal printer
+Documentation=https://github.com/swrhythm/heart-joybox
+After=multi-user.target
+# Never give up restarting: an unattended station has nobody to press retry.
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/local/bin/joybox run
+User=joybox
+Group=joybox
+SupplementaryGroups=lp gpio
+Environment=PYTHONUNBUFFERED=1
+
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+
+# The service pings systemd from its main loop.  If it wedges - a hung write to
+# a dead printer, say - systemd kills and restarts it.  120s leaves room for a
+# slow job to finish before the ping is considered late.
+WatchdogSec=120
+
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

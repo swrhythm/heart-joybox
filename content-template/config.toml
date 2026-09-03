@@ -1,0 +1,85 @@
+# Heart Joybox settings.
+#
+# This file lives on the SD card next to your images, so you can edit it on any
+# computer: put the card in a laptop, open this file in a plain text editor,
+# save, put the card back.
+#
+# Every setting below is optional.  Delete a line and the built-in default is
+# used.  If you make a typo, the Joybox logs the problem, ignores that one line
+# and keeps working - it will not stop printing because of this file.
+
+
+[print]
+# Printable width of the printer, in dots.  80mm printers are 576 or 512.
+# Run `joybox test` and look at the black bar: if its right-hand end is missing
+# from the paper, change this to 512.
+width_dots = 576
+
+# false = every pixel becomes pure black or pure white (crisp, best for text).
+# true  = dithered grey (better for photographs, looks noisy on text).
+dither = false
+
+# With dither = false, greys darker than this become black. 1-254.
+threshold = 128
+
+# Safety net: no single image may use more than this many dots of paper
+# (3000 dots is about 37 cm).  Taller images are scaled down, not refused.
+max_image_height = 3000
+
+# Blank lines fed after the receipt so the print clears the cutter blade.
+feed_lines_before_cut = 4
+
+# "partial" leaves a small tab (normal for 80mm cutters), "full" cuts right
+# through, "none" does not cut at all.
+cut = "partial"
+
+# How many copies of each receipt to print. 1 to 3.
+copies = 1
+
+
+[button]
+# BCM pin numbers, not physical pin numbers.  See docs/WIRING.md.
+gpio = 17
+
+# Seconds to ignore further presses after a print.  This is what stops someone
+# emptying the roll by drumming on the button.
+cooldown_seconds = 5.0
+
+# Cap on receipts per hour. 0 means no cap.  Worth setting for an event where
+# nobody is watching the station.
+max_prints_per_hour = 0
+
+# Hold the button this long to print a status slip instead of a receipt.
+hold_seconds = 5.0
+
+# If the button stays down this long it is treated as jammed and ignored until
+# it is released.
+stuck_seconds = 30.0
+
+
+[led]
+# The light in the button.  Set enabled = false if you did not wire one.
+enabled = true
+gpio = 27
+
+
+[printer]
+# The udev rule creates /dev/joybox-printer; the fallbacks cover a Pi that has
+# not applied the rule yet.
+device = "/dev/joybox-printer"
+fallback_devices = ["/dev/usb/lp0", "/dev/usb/lp1", "/dev/lp0"]
+
+# Ask the printer whether it has paper before printing.  If your printer does
+# not answer status queries this costs nothing - unknown never blocks a print.
+#
+# Set this to false if you ever see stray characters printed at the top of a
+# receipt: that means this printer prints the status request instead of
+# answering it.  Everything else keeps working, you just lose the
+# out-of-paper light.
+status_check = true
+
+
+[system]
+# DEBUG, INFO, WARNING or ERROR.  Read the log with:
+#   journalctl -u joybox -f
+log_level = "INFO"
