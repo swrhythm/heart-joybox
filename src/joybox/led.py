@@ -96,6 +96,9 @@ class StatusLed:
         while not self._stop.is_set():
             pattern = self._pattern
             self._changed.clear()
+            if not pattern.steps:
+                self._changed.wait(0.5)
+                continue
             for lit, seconds in pattern.steps:
                 self._apply(lit)
                 if self._changed.wait(seconds) or self._stop.is_set():

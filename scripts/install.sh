@@ -60,12 +60,29 @@ for group in lp gpio; do
   fi
 done
 
+# Put the person installing this in the same groups, so `joybox test` works
+# from their own shell without sudo.
+LOGIN_USER="${SUDO_USER:-}"
+if [ -n "$LOGIN_USER" ] && [ "$LOGIN_USER" != "root" ]; then
+  ADDED=""
+  for group in lp gpio; do
+    if getent group "$group" >/dev/null 2>&1 && ! id -nG "$LOGIN_USER" | tr ' ' '\n' | grep -qx "$group"; then
+      usermod -aG "$group" "$LOGIN_USER"
+      ADDED="${ADDED} ${group}"
+    fi
+  done
+  if [ -n "$ADDED" ]; then
+    note "added ${LOGIN_USER} to:${ADDED}"
+    warn "log out and back in before running joybox commands yourself (or use sudo until then)"
+  fi
+fi
+
 # -------------------------------------------------------------- the code
 say "Installing the code to ${PREFIX}"
 rm -rf "${PREFIX}/joybox"
 install -d "$PREFIX"
-cp -a "${REPO}/src/joybox" "${PREFIX}/joybox"
-cp -a "${REPO}/scripts/make_samples.py" "${PREFIX}/make_samples.py"
+cp -r "${REPO}/src/joybox" "${PREFIX}/joybox"
+cp "${REPO}/scripts/make_samples.py" "${PREFIX}/make_samples.py"
 find "$PREFIX" -type d -exec chmod 755 {} +
 find "$PREFIX" -type f -exec chmod 644 {} +
 chmod 755 "${PREFIX}/make_samples.py"
@@ -85,11 +102,13 @@ install -d /etc/heart-joybox
 # ------------------------------------------------------------ card content
 say "Setting up the content folder on the SD card"
 CONTENT="$(PYTHONPATH="$PREFIX" python3 -c 'from joybox import paths; print(paths.content_dir())')"
-install -d "$CONTENT" "${CONTENT}/body"
+# mkdir, not install -d: the card is FAT32 and cannot take a mode.
+mkdir -p "$CONTENT" "${CONTENT}/body"
 EXISTING="$(find "${CONTENT}/body" -maxdepth 1 -type f ! -name '._*' \
   \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' \) 2>/dev/null)"
 if [ -z "$EXISTING" ]; then
-  cp -a "${REPO}/content-template/." "$CONTENT/"
+  # cp -r, not cp -a: preserving ownership onto FAT32 fails.
+  cp -r "${REPO}/content-template/." "$CONTENT/"
   note "copied the sample artwork into ${CONTENT}"
 else
   note "${CONTENT} already has artwork; leaving it alone"
@@ -119,6 +138,14 @@ say "Installing the service"
 install -d /etc/systemd/system /etc/systemd/journald.conf.d
 install -m 644 "${REPO}/systemd/${UNIT}" "/etc/systemd/system/${UNIT}"
 install -m 644 "${REPO}/systemd/journald.conf.d/10-joybox.conf" /etc/systemd/journald.conf.d/
+
+# systemd refuses to start a unit that names a group the system does not have,
+# so keep only the ones that exist here.
+PRESENT=""
+for group in lp gpio; do
+  getent group "$group" >/dev/null 2>&1 && PRESENT="${PRESENT} ${group}"
+done
+sed -i "s/^SupplementaryGroups=.*/SupplementaryGroups=${PRESENT# }/" "/etc/systemd/system/${UNIT}"
 
 if [ "$WITH_WATCHDOG" -eq 1 ]; then
   install -d /etc/systemd/system.conf.d

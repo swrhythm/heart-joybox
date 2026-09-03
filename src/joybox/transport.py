@@ -40,7 +40,7 @@ class Transport:
     def write(self, data: bytes) -> None:
         raise NotImplementedError
 
-    def status(self) -> PrinterStatus:
+    def status(self, force: bool = False) -> PrinterStatus:
         return PrinterStatus()
 
     def close(self) -> None:
@@ -103,6 +103,7 @@ class CharDeviceTransport(Transport):
             )
 
         # Read/write lets us ask the printer for status; write-only still prints.
+        last: OSError | None = None
         for flags, readable in ((os.O_RDWR, True), (os.O_WRONLY, False)):
             try:
                 self._fd = os.open(path, flags | os.O_NONBLOCK)
@@ -112,6 +113,7 @@ class CharDeviceTransport(Transport):
                 last = exc
         if self._fd is None:
             self._note_failure()
+            assert last is not None
             hint = " (is the joybox user in the 'lp' group?)" if last.errno == errno.EACCES else ""
             raise TransportError(f"cannot open {path}: {last.strerror}{hint}") from last
 
@@ -226,13 +228,20 @@ class CharDeviceTransport(Transport):
             except OSError:
                 return
 
-    def status(self) -> PrinterStatus:
-        """Best-effort health check.  Unknown is not the same as broken."""
+    def status(self, force: bool = False) -> PrinterStatus:
+        """Best-effort health check.  Unknown is not the same as broken.
+
+        ``force`` skips the reconnection backoff.  A button press must not be
+        turned away because a poll failed ten seconds ago and the printer has
+        been plugged back in since.
+        """
         try:
-            self.open()
-        except TransportError as exc:
-            return PrinterStatus(online=False, source="disconnected", raw=None) if \
-                self.find_device() is None else PrinterStatus(online=False, source=str(exc))
+            self.open(force=force)
+        except TransportError:
+            # Definitely unreachable, which is different from unreadable: this
+            # one does light the error lamp.
+            reason = "disconnected" if self.find_device() is None else "unopenable"
+            return PrinterStatus(online=False, source=reason)
 
         reads = [self.port_status()]
         paper = self.query(escpos.STATUS_PAPER)
@@ -256,7 +265,7 @@ class MemoryTransport(Transport):
         self.buffer += data
         self.writes.append(bytes(data))
 
-    def status(self) -> PrinterStatus:
+    def status(self, force: bool = False) -> PrinterStatus:
         return self._status
 
     def describe(self) -> str:

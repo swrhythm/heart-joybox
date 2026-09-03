@@ -102,3 +102,16 @@ def test_file_transport_writes_a_job_for_inspection(tmp_path):
     transport.write(b"\x1dV\x42\x00")
     transport.close()
     assert target.read_bytes() == b"\x1dV\x42\x00"
+
+
+def test_a_press_is_not_turned_away_by_a_stale_backoff(tmp_path):
+    """The printer was unplugged, then plugged back in before the backoff ended."""
+    path = tmp_path / "lp0"
+    transport = CharDeviceTransport(path)
+    with pytest.raises(TransportError):
+        transport.open(force=True)                    # nothing there yet
+    path.write_bytes(b"")                             # ...now it is
+
+    assert transport.status().online is not True      # the poll still backs off
+    assert transport.status(force=True).online is not False
+    transport.close()

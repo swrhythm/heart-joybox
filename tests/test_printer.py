@@ -52,7 +52,7 @@ def test_a_missing_footer_just_drops_that_section(content_dir, tmp_path):
     assert len(result.sections) == 2
 
 
-def test_one_corrupt_image_does_not_sink_the_receipt(content_dir, tmp_path):
+def test_a_corrupt_header_does_not_sink_the_receipt(content_dir, tmp_path):
     (content_dir / "header.png").write_bytes(b"this is not a png")
     printer, transport = build(content_dir, tmp_path)
     result = printer.print_receipt(scan(content_dir))
@@ -60,6 +60,27 @@ def test_one_corrupt_image_does_not_sink_the_receipt(content_dir, tmp_path):
     assert result.skipped == ("header.png",)
     assert len(result.sections) == 2                 # body and footer still printed
     assert bytes(transport.buffer).endswith(escpos.cut("partial"))
+
+
+def test_a_corrupt_verse_is_replaced_by_another_one(content_dir, tmp_path):
+    """An empty middle is worse than a different verse."""
+    for name in ("1.png", "2.png"):
+        (content_dir / "body" / name).write_bytes(b"this is not a png")
+    printer, _ = build(content_dir, tmp_path)
+
+    for _ in range(5):
+        result = printer.print_receipt(scan(content_dir))
+        assert result.body.name == "3.png"           # the only one that renders
+        assert len(result.sections) == 3             # header, verse, footer
+
+
+def test_every_verse_being_corrupt_is_an_error_not_a_blank_receipt(content_dir, tmp_path):
+    for image in (content_dir / "body").iterdir():
+        image.write_bytes(b"this is not a png")
+    printer, transport = build(content_dir, tmp_path)
+    with pytest.raises(RuntimeError, match="none of the 3 body image"):
+        printer.print_receipt(scan(content_dir))
+    assert not transport.buffer
 
 
 def test_out_of_paper_blocks_the_job_instead_of_buffering_it(content_dir, tmp_path):

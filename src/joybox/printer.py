@@ -44,17 +44,18 @@ class ReceiptPrinter:
 
     # ------------------------------------------------------------- status
 
-    def status(self) -> PrinterStatus:
+    def status(self, force: bool = False) -> PrinterStatus:
         if not self.config.printer.status_check:
             return PrinterStatus()
         try:
-            return self.transport.status()
+            return self.transport.status(force=force)
         except (TransportError, OSError) as exc:  # pragma: no cover - defensive
             log.warning("status check failed: %s", exc)
             return PrinterStatus()
 
     def _guard(self) -> PrinterStatus:
-        status = self.status()
+        # Forced: someone is standing there having just pressed the button.
+        status = self.status(force=True)
         if status.blocked:
             raise PrintBlocked(f"printer is {status.describe()}", status)
         return status
@@ -81,17 +82,55 @@ class ReceiptPrinter:
         job += self.trailer()
         return bytes(job), printed, skipped
 
+    def _pick_body(self, content: ContentSet) -> tuple[Path, bytes, list[str]]:
+        """Choose a body image that actually renders.
+
+        A receipt with a header and a footer and no verse in the middle is
+        worse than a different verse, so a corrupt file costs another draw
+        from the bag rather than the whole middle of the receipt.
+        """
+        skipped: list[str] = []
+        tried: set[Path] = set()
+        # The bag draws each image once per cycle, so two cycles' worth of
+        # draws is enough to have seen every image even starting mid-cycle.
+        for _ in range(2 * len(content.bodies)):
+            if len(tried) == len(content.bodies):
+                break
+            body = self.bag.pick(content.bodies)
+            if body in tried:
+                continue
+            tried.add(body)
+            try:
+                return body, self.cache.get(body).data, skipped
+            except (OSError, ValueError) as exc:
+                log.error("skipping %s: %s", body, exc)
+                skipped.append(body.name)
+        raise RuntimeError(
+            f"none of the {len(content.bodies)} body image(s) could be rendered"
+        )
+
     def print_receipt(self, content: ContentSet) -> PrintResult:
         """Header + a random body image + footer, then cut."""
         if not content.ready:
             raise RuntimeError(f"no body images in {content.directory}")
         self._guard()
 
-        body = self.bag.pick(content.bodies)
-        images = [p for p in (content.header, body, content.footer) if p is not None]
-        job, printed, skipped = self.compose(images)
-        if not printed:
-            raise RuntimeError("none of the images could be rendered")
+        body, body_bytes, skipped = self._pick_body(content)
+        job = bytearray(escpos.INIT + escpos.ALIGN_LEFT)
+        printed: list[str] = []
+        for path, data in (
+            (content.header, None), (body, body_bytes), (content.footer, None)
+        ):
+            if path is None:
+                continue
+            try:
+                job += data if data is not None else self.cache.get(path).data
+                printed.append(path.name)
+            except (OSError, ValueError) as exc:
+                log.error("skipping %s: %s", path, exc)
+                skipped.append(path.name)
+        job += self.trailer()
+        job = bytes(job)
 
         started = time.monotonic()
         for _ in range(self.config.printing.copies):
