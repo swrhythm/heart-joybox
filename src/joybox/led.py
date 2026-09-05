@@ -34,7 +34,7 @@ STARTING = Pattern("starting", ((True, 0.1), (False, 0.1)), "starting up")
 READY = Pattern("ready", ((True, 1.0),), "ready - press the button")
 PRINTING = Pattern("printing", ((True, 0.06), (False, 0.06)), "printing")
 PRINTER_ERROR = Pattern("printer-error", _blinks(2),
-                        "printer offline, or the button is jammed")
+                        "printer offline, or the button is jammed or not working")
 NO_PAPER = Pattern("no-paper", _blinks(3), "out of paper, or the paper cover is open")
 NO_CONTENT = Pattern("no-content", ((True, 1.0), (False, 1.0)),
                      "no images found on the SD card")

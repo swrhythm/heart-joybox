@@ -14,6 +14,34 @@ Group=joybox
 SupplementaryGroups=lp gpio
 Environment=PYTHONUNBUFFERED=1
 
+# lgpio opens one FIFO per process, at import.  Its C half creates it at
+# $LG_WD/.lgd-nfy<n>, falling back to the working directory; its Python half
+# opens .lgd-nfy<n> relative to the working directory and never checks whether
+# the C half managed it.  With no WorkingDirectory= systemd starts us in "/",
+# which this account cannot write to, so importing lgpio raised, gpiozero
+# dropped to a driver that cannot watch a button on this kernel, and the button
+# crash-looped the service every three seconds.  Either of the next two lines
+# fixes it; both is cheap.  ($HOME is not consulted - do not add it back.)
+RuntimeDirectory=joybox
+WorkingDirectory=/run/joybox
+Environment=LG_WD=/run/joybox
+
+# Name the driver rather than letting gpiozero shop around.  Every fallback is a
+# dead end here - rpigpio is the same lgpio underneath, pigpio is not installed,
+# native cannot see a press - so the chain bought silence, not resilience.  A
+# broken lgpio should be one loud error instead of a station that lights up,
+# looks ready, and never prints.  To go back to auto-detect on a station that
+# needs it: systemctl edit joybox, then Environment=GPIOZERO_PIN_FACTORY=
+Environment=GPIOZERO_PIN_FACTORY=lgpio
+
+# Image filenames come off a FAT32 card, so they are whatever bytes a Windows or
+# Mac laptop wrote and are not always valid UTF-8.  C.UTF-8 keeps Python's
+# surrogate-escape output handling on; a regional UTF-8 locale would switch it
+# to strict and let one odd filename kill a log line.  C.UTF-8 is built into
+# glibc, so unlike en_GB.UTF-8 it needs no locale-gen.
+Environment=LANG=C.UTF-8
+Environment=PYTHONUTF8=1
+
 Restart=always
 RestartSec=3
 TimeoutStopSec=15

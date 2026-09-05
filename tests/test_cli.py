@@ -1,11 +1,15 @@
 """The commands the setup and troubleshooting guides tell you to run."""
 
+import io
+import sys
 from pathlib import Path
 
 import pytest
 
 from joybox.__main__ import main
 from conftest import write_image
+
+from joybox import gpio, health
 
 
 @pytest.fixture(autouse=True)
@@ -90,3 +94,50 @@ def test_status_reports_a_missing_printer(capsys):
 def test_an_unknown_command_is_rejected():
     with pytest.raises(SystemExit):
         main(["frobnicate"])
+
+
+def test_a_filename_the_card_mangled_does_not_break_the_listing(tmp_path, monkeypatch):
+    """A FAT32 card can hand us bytes that are not UTF-8; a listing must survive.
+
+    The stream is forced to errors="strict" because that is what an SSH login
+    under a regional UTF-8 locale gets, and it is the case that used to raise.
+    """
+    content = tmp_path / "content"
+    write_image(content / "body" / "1.png")
+    (content / "body" / "caf\udce9.txt").write_bytes(b"junk")
+
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="utf-8", errors="strict", write_through=True)
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", stream)
+
+    assert main(["--content", str(content), "list"]) == 0
+    stream.flush()
+    assert "caf" in raw.getvalue().decode("utf-8")
+
+
+def test_doctor_calls_a_crash_looping_service_a_failure(monkeypatch, capsys):
+    """The station this was written for read [warn] on its twenty-first restart."""
+    monkeypatch.setattr(health, "service_facts", lambda unit=health.UNIT: {
+        "LoadState": "loaded", "ActiveState": "activating", "SubState": "auto-restart",
+        "Result": "exit-code", "NRestarts": "21", "ActiveEnterTimestampMonotonic": "0"})
+    assert main(["doctor"]) == 2
+    assert "[FAIL] service" in capsys.readouterr().out
+
+
+def test_doctor_fails_when_gpiozero_cannot_watch_a_press(monkeypatch, tmp_path, capsys):
+    chip = tmp_path / "gpiochip0"
+    chip.touch()
+    monkeypatch.setattr(health, "GPIOCHIP", chip)
+    monkeypatch.setattr(gpio, "available", lambda: True)
+    monkeypatch.setattr(gpio, "pin_factory", lambda: gpio.PinFactory(
+        "NativeFactory", ("Falling back from lgpio: [Errno 2] ... '.lgd-nfy-3'",)))
+    assert main(["doctor"]) == 2
+    out = capsys.readouterr().out
+    assert "[FAIL] gpio driver" in out and "lgd-nfy" in out
+
+
+def test_doctor_says_nothing_alarming_where_there_is_no_gpio(monkeypatch, capsys):
+    monkeypatch.setattr(health, "GPIOCHIP", Path("/definitely/not/here"))
+    main(["doctor"])
+    assert "[warn] gpio driver" in capsys.readouterr().out

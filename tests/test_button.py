@@ -1,8 +1,11 @@
 """The rules that protect an unattended paper roll."""
 
 import pytest
+from conftest import fake_gpiozero
 
-from joybox.button import PressPolicy, StuckDetector
+from joybox import gpio
+from joybox.button import ButtonWatcher, PressPolicy, StuckDetector
+from joybox.config import ButtonConfig
 
 
 @pytest.fixture
@@ -100,3 +103,67 @@ def test_becoming_stuck_is_reported_once_not_every_tick(clock):
     assert detector.update(True)
     clock[0] = 12
     assert not detector.update(True) and detector.stuck
+
+
+# --------------------------------------------------- claiming the real pin
+
+class _FakeButton:
+    """The parts of gpiozero.Button that ButtonWatcher touches."""
+
+    def __init__(self, pin, pull_up=True, bounce_time=None, hold_time=1.0, hold_repeat=False):
+        self.pin = pin
+        self.is_pressed = False
+        self.closed = False
+        self.when_pressed = self.when_held = None
+
+    def close(self):
+        self.closed = True
+
+
+class _Unclaimable(_FakeButton):
+    """No pin factory at all - what a Pi with a broken lgpio does."""
+
+    def __init__(self, *args, **kwargs):
+        raise RuntimeError("Unable to find pin factory 'lgpio'")
+
+
+class _NoEdges(_FakeButton):
+    """Constructs, then refuses edge alerts - what a missing .lgd-nfy pipe does."""
+
+    def __setattr__(self, name, value):
+        if name == "when_pressed" and value is not None:
+            raise OSError("[Errno 2] No such file or directory: '.lgd-nfy-3'")
+        super().__setattr__(name, value)
+
+
+def watcher(monkeypatch, device_class, on_press=lambda: None, on_hold=None):
+    monkeypatch.setattr(gpio, "gpiozero", lambda: fake_gpiozero(Button=device_class))
+    return ButtonWatcher(ButtonConfig(), on_press=on_press, on_hold=on_hold)
+
+
+def test_a_button_that_cannot_be_claimed_does_not_take_the_station_down(monkeypatch):
+    watch = watcher(monkeypatch, _Unclaimable)       # this used to end the process
+    assert not watch.active
+    watch.poll()                                     # the main loop calls both every tick
+    watch.close()
+
+
+def test_a_button_that_cannot_watch_edges_gives_the_pin_back(monkeypatch):
+    made = []
+
+    class _Recording(_NoEdges):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+    watch = watcher(monkeypatch, _Recording)
+    assert not watch.active
+    assert made and made[0].closed
+
+
+def test_a_claimed_button_reaches_the_press_handler(monkeypatch):
+    presses = []
+    watch = watcher(monkeypatch, _FakeButton, on_press=lambda: presses.append(1))
+    assert watch.active
+    watch._device.when_pressed()
+    assert presses == [1]

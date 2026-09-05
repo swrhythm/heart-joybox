@@ -10,7 +10,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import health, led
+from . import gpio, health, led
 from .button import ButtonWatcher, PressPolicy
 from .cache import RenderCache
 from .config import Config
@@ -189,7 +189,10 @@ class Joybox:
     def current_pattern(self) -> led.Pattern:
         if self.busy:
             return led.PRINTING
-        if self.button is not None and self.button.stuck:
+        # A button we never managed to claim is, to whoever is standing there,
+        # exactly a jammed button: pressing it does nothing.  Say so on the light
+        # rather than showing a steady "ready" to an empty room.
+        if self.button is not None and (self.button.stuck or not self.button.active):
             return led.PRINTER_ERROR
         if self.status.paper_out or self.status.cover_open:
             return led.NO_PAPER
@@ -202,6 +205,10 @@ class Joybox:
     def status_text(self) -> str:
         if self.busy:
             return "printing"
+        # systemctl reads this through sd_notify, and the doctor quotes it back.
+        # On a station with no status light it is the only place the fault shows.
+        if self.button is not None and not self.button.active:
+            return "button not watched - run 'joybox doctor'"
         pattern = self.current_pattern()
         if pattern is led.READY:
             return f"ready - {len(self.content.bodies)} images, {self.prints} printed this session"
@@ -221,6 +228,9 @@ class Joybox:
         )
         if not self.button.active:
             log.error("no GPIO button: presses will not be seen (run 'joybox doctor')")
+        driver = gpio.factory_name()
+        if driver:
+            log.info("gpio pins driven by %s", driver)
 
         self._warm_cache()
         self.refresh_status()

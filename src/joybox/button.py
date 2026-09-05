@@ -116,15 +116,27 @@ class ButtonWatcher:
         if module is None:
             log.warning("button on GPIO %s not watched: %s", config.gpio, gpio.unavailable_reason())
             return
-        self._device = module.Button(
-            config.gpio,
-            pull_up=config.pull_up,
-            bounce_time=config.bounce_seconds or None,
-            hold_time=config.hold_seconds,
-            hold_repeat=False,
-        )
-        self._device.when_pressed = self._pressed
-        self._device.when_held = self._held
+        try:
+            self._device = module.Button(
+                config.gpio,
+                pull_up=config.pull_up,
+                bounce_time=config.bounce_seconds or None,
+                hold_time=config.hold_seconds,
+                hold_repeat=False,
+            )
+            # Attaching the handlers is inside the try too: on some pin factories
+            # that is the call that actually asks the kernel for edge alerts, so
+            # it fails for the same reasons the constructor does.
+            self._device.when_pressed = self._pressed
+            self._device.when_held = self._held
+        except Exception as exc:  # pragma: no cover - depends on hardware
+            # A button we cannot claim is a station that prints nothing, but a
+            # station that keeps running still answers 'joybox doctor' and can
+            # still be printed from by hand.  Crashing here just hid the reason
+            # behind a restart loop.
+            log.warning("could not watch GPIO %s for the button: %s", config.gpio, exc)
+            self.close()  # release the pin if the constructor got that far
+            return
         log.info("watching button on GPIO %s", config.gpio)
 
     @property

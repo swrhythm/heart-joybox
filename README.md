@@ -54,7 +54,7 @@ things it is — from across the room, with no laptop.
 |---|---|
 | Solid on | Ready |
 | Fast flicker | Printing |
-| 2 blinks, pause | Printer offline, or button jammed |
+| 2 blinks, pause | Printer offline, or button jammed or not working |
 | 3 blinks, pause | Out of paper, or lid open |
 | Slow 1-second blink | No images found on the card |
 | Fast blink at power-on | Starting up |

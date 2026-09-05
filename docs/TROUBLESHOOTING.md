@@ -9,7 +9,7 @@ Start here: **what is the light doing?**
 | **Solid on** | Ready | Press the button |
 | **Flickering fast** | Printing | Wait |
 | **Fast blink at power-on** | Starting up | Wait ~30 seconds |
-| **Blink · blink · pause** | Printer offline, or the button is jammed | [Printer offline](#the-light-blinks-twice-printer-offline) |
+| **Blink · blink · pause** | Printer offline, or the button is jammed or not working | [Printer offline](#the-light-blinks-twice-printer-offline) |
 | **Blink · blink · blink · pause** | Out of paper, or the paper lid is open | Load paper, close the lid firmly |
 | **Slow blink, one second on, one off** | No images found on the SD card | [No images](#the-light-blinks-slowly-no-images) |
 | **Off entirely** | No power, or the service is not running | [Nothing at all](#nothing-happens-at-all) |
@@ -71,6 +71,11 @@ The Joybox cannot reach the printer.
 This code also means **the button is jammed** — held down for more than 30
 seconds. The Joybox deliberately ignores it so a stuck button cannot print the
 whole roll. Free the button and the light goes back to solid on its own.
+
+It also means **the Joybox could not claim the button pin at all**, which is a
+software fault rather than a wiring one. The service keeps running so you can
+still print by hand and still ask it what is wrong; `joybox doctor` names the
+cause, and `systemctl status joybox` says `button not watched`.
 
 ### The light blinks three times: out of paper
 
@@ -186,6 +191,13 @@ The light being solid means the software is fine, so it is the wiring.
 4. With SSH you can test the software side without the button:
    `joybox print` prints a receipt. If that works, it is definitely wiring.
 
+**Testing with a bare jumper wire** before the real button arrives works, but a
+wire has no debounce and behaves in three ways that look like faults and are
+not: a single touch may register once (the 50 ms debounce absorbs the rest of
+the chatter); holding it on for more than five seconds prints the diagnostics
+slip instead of a receipt; and leaving it shorted for thirty seconds trips the
+jammed-button lockout and the two-blink code until you part the wires.
+
 ### It worked yesterday and now the light never goes solid
 
 Almost always the SD card. Reflash it following [SETUP.md](SETUP.md) — and turn
@@ -281,6 +293,52 @@ dmesg | grep -i usblp       # did the kernel bind the printer driver?
 If `lsusb` shows nothing, it is the cable, the OTG adapter, or the wrong
 micro-USB port. If `lsusb` shows the printer but there is no `lp0`, the
 `usblp` driver did not attach — `sudo modprobe usblp` and replug.
+
+**The service restarts every few seconds, and the log mentions `.lgd-nfy`**
+
+```
+xCreatePipe: Can't set permissions (436) for //.lgd-nfy0, No such file or directory
+PinFactoryFallback: Falling back from lgpio: ... '.lgd-nfy-3'
+```
+
+lgpio makes a small pipe in its working directory when it is imported, and a
+service started in a directory it cannot write to never gets one. The traceback
+that follows blames `/sys/class/gpio`, which is a red herring — that is the
+*last* driver gpiozero tried, not the one that failed first. Fixed by the
+`WorkingDirectory=` line in the shipped unit, so the fix is to update:
+
+```bash
+cd ~/heart-joybox && sudo ./scripts/update.sh
+systemctl show joybox -p WorkingDirectory     # expect /run/joybox
+ls -la /run/joybox/                           # expect a .lgd-nfy* pipe
+```
+
+**`gpio driver` says gpiozero fell back to NativeFactory** — that driver can
+light the LED but cannot see a button press, so the station looks ready and
+never prints. Install the real driver and restart:
+
+```bash
+sudo apt install python3-lgpio && sudo systemctl restart joybox
+```
+
+The unit names `lgpio` outright rather than letting gpiozero pick, so a problem
+is one loud error instead of a silent fallback. On a board that genuinely needs
+a different driver, `sudo systemctl edit joybox` and add an empty
+`Environment=GPIOZERO_PIN_FACTORY=` to restore auto-detection.
+
+**`setlocale: LC_CTYPE: cannot change locale (UTF-8)` when you log in** — comes
+from your laptop, not the Pi, and nothing is broken. macOS sends `LC_CTYPE=UTF-8`,
+which is not a locale name Linux knows. Stop sending it, on your Mac in
+`~/.ssh/config`:
+
+```
+Host joybox joybox.local
+    SetEnv LC_CTYPE=C.UTF-8
+```
+
+(Terminal → Settings → Profiles → Advanced → *Set locale environment variables
+on startup* is where it comes from.) The service itself is unaffected: it runs
+under `C.UTF-8`, set in the unit.
 
 **A bad `config.toml`** cannot stop the Joybox — it logs the problem, uses the
 defaults, and keeps printing. See exactly what it made of your file with:
