@@ -105,10 +105,31 @@ diagnostics slip.
 
 Pulling the power on a running Pi can corrupt the SD card. A second momentary
 button between **pin 5 (GPIO3)** and **pin 6 (GND)** gives you a proper
-shutdown. Add this line to `config.txt` on the SD card:
+shutdown. Add this line to `/boot/firmware/config.txt`:
 
 ```
 dtoverlay=gpio-shutdown,gpio_pin=3
+```
+
+**Where the line goes matters.** `config.txt` is split into sections that only
+apply to certain models — `[all]`, `[pi4]`, `[cm4]`, `[pi5]` — and a line under
+`[pi5]` is silently ignored on a Zero. Everything after a heading belongs to it
+until the next one, so put the line **under `[all]`**. Check the last heading in
+the file before you append to the end:
+
+```bash
+grep -n '^\[' /boot/firmware/config.txt      # [all] should be the last one
+```
+
+Editing the card on a Mac or PC instead? It is `config.txt` in the root of the
+small FAT partition — the only one those machines will mount. On the Pi itself
+it is `/boot/firmware/config.txt`; older guides say `/boot/config.txt`, which
+has been a leftover symlink since Bookworm.
+
+Reboot, then confirm the overlay actually loaded:
+
+```bash
+grep -i gpio-shutdown /proc/bus/input/devices    # a match means it is live
 ```
 
 Then a press shuts the Pi down cleanly, and a press while it is off wakes it

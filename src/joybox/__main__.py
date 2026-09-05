@@ -18,6 +18,29 @@ from .transport import CharDeviceTransport, FileTransport, MemoryTransport, Tran
 log = logging.getLogger("joybox")
 
 
+def _keep_output_printable() -> None:
+    """Never let a filename stop a diagnostic from printing.
+
+    Names come off a FAT32 card, so they are whatever bytes a Windows or Mac
+    laptop wrote; vfat hands them over as latin-1 and Python escapes the
+    undecodable ones into surrogates.  Under a regional UTF-8 locale - which is
+    what an SSH login gets - printing one of those raises UnicodeEncodeError,
+    turning ``joybox list`` and ``joybox doctor``, the two commands the
+    troubleshooting guide leans on, into a traceback at the worst moment.
+
+    backslashreplace rather than replace, so the output still says which byte
+    was odd and the file can be found and renamed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # pytest's capture, or a plain pipe wrapper
+            continue
+        try:
+            reconfigure(errors="backslashreplace")
+        except (OSError, ValueError):  # pragma: no cover - unusual streams
+            pass
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="joybox",
@@ -273,6 +296,7 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    _keep_output_printable()
     args = build_parser().parse_args(argv)
     settings = load_config(args)
     if args.command == "run":

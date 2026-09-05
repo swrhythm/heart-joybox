@@ -1,4 +1,5 @@
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,11 @@ def write_image(path: Path, width: int = 576, height: int = 40, colour: str = "w
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (width, height), colour).save(path)
     return path
+
+
+def fake_gpiozero(**members):
+    """A stand-in for the gpiozero module, which CI never installs."""
+    return types.SimpleNamespace(**members)
 
 
 @pytest.fixture

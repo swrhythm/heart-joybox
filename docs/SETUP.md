@@ -43,6 +43,11 @@ ssh joybox@joybox.local
 If `joybox.local` does not resolve, find the Pi's address in your router's
 device list and use that instead.
 
+If the login prints a row of `setlocale: LC_CTYPE: cannot change locale (UTF-8)`
+warnings, nothing is wrong — that is your laptop's terminal, not the Pi, and the
+Joybox does not care. [TROUBLESHOOTING.md](TROUBLESHOOTING.md) has the one-line
+fix if the noise bothers you.
+
 ## 3. Install
 
 ```bash
