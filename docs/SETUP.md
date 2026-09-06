@@ -98,6 +98,9 @@ joybox doctor
 Everything should read `ok`. If not, each line names its own fix, and
 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** covers them in detail.
 
+One line will say `warn` here and that is expected: `safe power off` stays a
+warning until you do step 9.
+
 Then print the self-test page:
 
 ```bash
@@ -137,9 +140,12 @@ Replace the images with your own and add as many to `body/` as you like.
 
 Put the card back, power up, press the button.
 
-## 9. Optional hardening for an unattended station
+## 9. Hardening for an unattended station
 
-Two things worth doing before you leave the station alone for a day.
+Two things worth doing before you leave the station alone for a day. **The
+second one is the important one.** If anybody other than you will ever unplug
+this station — and at an event they will — the read-only overlay is what stands
+between a power pull and a reflash.
 
 **Cap the receipts per hour.** In `config.toml` on the card:
 
@@ -163,6 +169,9 @@ normally, because it lives on the boot partition.
 
 To install updates later, turn the overlay off in `raspi-config`, reboot, do
 the work, turn it back on, reboot.
+
+`joybox doctor` reports which guard is in place on the `safe power off` line, so
+you can check this from across the room rather than from memory.
 
 ## What you end up with
 

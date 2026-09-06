@@ -32,8 +32,21 @@ If that does not do it, do the same thing to both:
 4. Plug the **Pi** in.
 5. Wait 30 seconds for a solid light.
 
-You cannot break anything by doing this. The Joybox is built to survive being
-unplugged mid-print.
+**If the station has a shutdown button** — the optional second button in
+[WIRING.md](WIRING.md) — press and hold that first, and wait for the green light
+on the Pi to stop flickering. That parks the SD card before the power goes.
+
+A half-finished receipt is never a problem; the Joybox picks up cleanly on the
+next press. The SD card is the part that minds. Pulling the power on a running
+Pi can corrupt it, and that is the one failure that needs a laptop and a reflash
+to undo. Ask the station which side of that line it is on:
+
+```bash
+joybox doctor | grep 'safe power off'
+```
+
+If that warns, turn on the read-only overlay — [SETUP.md](SETUP.md) step 9, one
+reboot — and from then on unplugging really is free.
 
 ## The status slip
 
@@ -197,6 +210,44 @@ not: a single touch may register once (the 50 ms debounce absorbs the rest of
 the chatter); holding it on for more than five seconds prints the diagnostics
 slip instead of a receipt; and leaving it shorted for thirty seconds trips the
 jammed-button lockout and the two-blink code until you part the wires.
+
+### The Pi does not boot at all
+
+No SSH, and the button does nothing. Work through this in order — and **do not
+keep power-cycling it**, which is the one thing most likely to make it worse.
+
+After an unclean shutdown the Pi checks and repairs its filesystem on the next
+boot. On a Pi Zero that takes minutes, not the usual thirty seconds. Cutting the
+power *during* that repair is how a recoverable card becomes a dead one. Give it
+ten minutes untouched before you touch the plug again.
+
+**Read the green light on the Pi itself**, next to the micro-USB ports. It says
+a lot with no laptop involved:
+
+| Green light | What it means |
+|---|---|
+| Flickering irregularly | Reading the card and booting. Leave it alone. |
+| Dark | It cannot read the card at all — suspect power, then the card. |
+| A repeating group of blinks | The boot files could not be read. Count the blinks. |
+| **Solid, never flickering** | Stalled early, or already halted. Not normal running. |
+
+Then:
+
+1. **Unplug every jumper wire from the header** and power on a bare Pi. A
+   shutdown button — or any stray wire — holding GPIO3 low turns the Pi off the
+   moment it boots, which looks exactly like a dead card and is not.
+2. **Try a different power supply and cable.** A supply that cannot hold 5V
+   under load fails in ways that look like corruption.
+3. **Try the Pi's address instead of `joybox.local`.** Name resolution is the
+   flakiest link in the chain; your router's device list has the number.
+4. **Put the card in a laptop.** Your computer cannot read the Linux part, but
+   it will mount the small boot partition. If `config.txt` and your
+   `heart-joybox` folder appear, the card is alive and this is not corruption.
+   If the computer calls the disk unreadable, the card has failed.
+
+**Your artwork survives either way.** It lives on that boot partition — the part
+a laptop can read — so copy it off before you reflash. Everything else is a
+`git clone` away; see [Start completely fresh](#start-completely-fresh).
 
 ### It worked yesterday and now the light never goes solid
 

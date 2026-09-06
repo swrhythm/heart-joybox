@@ -117,3 +117,48 @@ def test_a_unit_that_was_never_installed_says_so(monkeypatch):
 
 def test_one_restart_is_a_warning_not_a_loop(monkeypatch):
     assert check(monkeypatch, facts(NRestarts="1")).status == health.WARN
+
+
+# ------------------------------------------------- is it safe to unplug
+
+ORDINARY_MOUNTS = "/dev/mmcblk0p2 / ext4 rw,noatime 0 0\nproc /proc proc rw 0 0\n"
+OVERLAY_MOUNTS = "overlay / overlay ro,lowerdir=/ro,upperdir=/rw 0 0\n"
+DOCKER_MOUNTS = ORDINARY_MOUNTS + "overlay /var/lib/docker/overlay2/ab/merged overlay rw 0 0\n"
+SHUTDOWN_DEVICE = 'I: Bus=0019 Vendor=0001\nN: Name="gpio-shutdown"\nH: Handlers=kbd event0\n'
+
+
+def power_off(monkeypatch, tmp_path, mounts="", devices=""):
+    for name, text in (("MOUNTS", mounts), ("INPUT_DEVICES", devices)):
+        path = tmp_path / name.lower()
+        path.write_text(text)
+        monkeypatch.setattr(health, name, path)
+    return health._check_safe_power_off()
+
+
+def test_a_read_only_root_is_safe_to_unplug(monkeypatch, tmp_path):
+    result = power_off(monkeypatch, tmp_path, mounts=OVERLAY_MOUNTS)
+    assert result.status == health.PASS and "read-only" in result.detail
+
+
+def test_a_shutdown_button_counts_as_protection(monkeypatch, tmp_path):
+    result = power_off(monkeypatch, tmp_path, mounts=ORDINARY_MOUNTS, devices=SHUTDOWN_DEVICE)
+    assert result.status == health.PASS and "shutdown button" in result.detail
+
+
+def test_a_station_with_neither_guard_is_warned_about(monkeypatch, tmp_path):
+    result = power_off(monkeypatch, tmp_path, mounts=ORDINARY_MOUNTS)
+    assert result.status == health.WARN
+    assert "raspi-config" in result.detail and "WIRING.md" in result.detail
+
+
+def test_somebody_elses_overlay_mount_does_not_count(monkeypatch, tmp_path):
+    # docker and snap both leave overlay mounts on an otherwise ordinary Pi.
+    # Reading one of those as "safe to unplug" is the single mistake this check
+    # exists to prevent, so match the type on "/" and nowhere else.
+    assert power_off(monkeypatch, tmp_path, mounts=DOCKER_MOUNTS).status == health.WARN
+
+
+def test_a_missing_proc_file_is_not_mistaken_for_protection(monkeypatch, tmp_path):
+    monkeypatch.setattr(health, "MOUNTS", tmp_path / "gone")
+    monkeypatch.setattr(health, "INPUT_DEVICES", tmp_path / "also-gone")
+    assert health._check_safe_power_off().status == health.WARN

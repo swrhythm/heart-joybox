@@ -30,6 +30,8 @@ PASS, WARN, FAIL = "PASS", "WARN", "FAIL"
 
 UNIT = "joybox.service"
 GPIOCHIP = Path("/dev/gpiochip0")
+MOUNTS = Path("/proc/mounts")
+INPUT_DEVICES = Path("/proc/bus/input/devices")
 
 
 # --------------------------------------------------------------- systemd
@@ -109,6 +111,34 @@ def free_space(path: Path) -> str:
     except OSError:
         return "unknown"
     return f"{usage.free / 1_048_576:.0f} MB free of {usage.total / 1_048_576:.0f} MB"
+
+
+def power_off_protection() -> str:
+    """What, if anything, makes it safe to pull the plug on this station.
+
+    Returns a short description, or "" when nothing protects the card.  Pulling
+    the power on a running Pi is the usual way an SD card dies, and the restart
+    procedure in the troubleshooting guide tells whoever is standing there to do
+    exactly that, so it is worth knowing which of the two guards is in place.
+    """
+    try:
+        for line in MOUNTS.read_text(encoding="utf-8", errors="replace").splitlines():
+            fields = line.split()
+            # /proc/mounts is "device mountpoint type options ...".  Match the
+            # type on "/" itself: docker and snap leave overlay mounts elsewhere
+            # on a perfectly ordinary Pi, and counting those would report an
+            # unprotected card as safe - the one mistake this must not make.
+            if len(fields) >= 3 and fields[1] == "/" and fields[2] == "overlay":
+                return "read-only root (safe to unplug)"
+    except OSError:
+        pass
+    try:
+        # The gpio-shutdown overlay registers an input device under this name.
+        if "gpio-shutdown" in INPUT_DEVICES.read_text(encoding="utf-8", errors="replace"):
+            return "shutdown button on GPIO3"
+    except OSError:
+        pass
+    return ""
 
 
 def service_facts(unit: str = UNIT) -> dict[str, str]:
@@ -200,6 +230,7 @@ def diagnostics_lines(config: Config, content: ContentSet, printer_state: str,
         lines += [f"  ! {problem}" for problem in content.problems]
 
     lines += ["", f"card slot {free_space(content.directory)}"]
+    lines += [f"power off {power_off_protection() or 'unprotected - do not pull the plug'}"]
     return lines
 
 
@@ -260,6 +291,22 @@ def _check_pin_factory() -> Check:
                      f"this kernel - the light works and no press is ever seen{why} - run: "
                      "sudo apt install python3-lgpio")
     return Check("gpio driver", PASS, f"gpiozero drives the pins with {factory.name}")
+
+
+def _check_safe_power_off() -> Check:
+    """Is there a way to turn this station off without losing the card?
+
+    A warning rather than a failure: a station with neither guard still prints
+    perfectly.  It just cannot survive the thing the troubleshooting guide tells
+    people to do to it.
+    """
+    protection = power_off_protection()
+    if protection:
+        return Check("safe power off", PASS, protection)
+    return Check("safe power off", WARN,
+                 "pulling the power can corrupt the card - turn on the read-only overlay "
+                 "(sudo raspi-config, Performance Options, Overlay File System) or wire a "
+                 "shutdown button (docs/WIRING.md)")
 
 
 def _check_service(unit: str = UNIT) -> Check:
@@ -384,6 +431,7 @@ def run_checks(config: Config) -> list[Check]:
         finally:
             transport.close()
 
+    checks.append(_check_safe_power_off())
     checks.append(_check_service())
     return checks
 
