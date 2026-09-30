@@ -172,7 +172,7 @@ Too much blank paper after each receipt: lower it.
 
 ### Someone is mashing the button
 
-That is already handled: presses inside the 5-second cooldown are ignored. For
+That is already handled: presses inside the 1-second cooldown are ignored. For
 an unattended station you can also cap the hour:
 
 ```toml

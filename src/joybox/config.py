@@ -53,7 +53,7 @@ class ButtonConfig:
     pull_up: bool = True
     bounce_seconds: float = 0.05
     hold_seconds: float = 5.0
-    cooldown_seconds: float = 5.0
+    cooldown_seconds: float = 1.0
     max_prints_per_hour: int = 0  # 0 = unlimited
     stuck_seconds: float = 30.0
     diagnostics_on_hold: bool = True
