@@ -41,9 +41,9 @@ copies = 1
 # BCM pin numbers, not physical pin numbers.  See docs/WIRING.md.
 gpio = 17
 
-# Seconds to ignore further presses after a print.  This is what stops someone
+# Seconds to ignore further presses after a print finishes.  This is what stops someone
 # emptying the roll by drumming on the button.
-cooldown_seconds = 5.0
+cooldown_seconds = 1.0
 
 # Cap on receipts per hour. 0 means no cap.  Worth setting for an event where
 # nobody is watching the station.

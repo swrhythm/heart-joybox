@@ -39,7 +39,7 @@ editing one image.
 | Out of paper | Light shows it; no queue builds up to dump later |
 | One corrupt image | Skipped; the rest of the receipt still prints |
 | A typo in `config.toml` | Ignored; defaults used; keeps printing |
-| Button mashing | 5-second cooldown, plus an optional hourly cap |
+| Button mashing | 1-second cooldown, plus an optional hourly cap |
 | Button jammed down | Locked out until released |
 | An image far too tall | Scaled down instead of eating the roll |
 | Software crash or hang | Restarted by systemd within seconds |
